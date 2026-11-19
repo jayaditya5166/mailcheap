@@ -62,11 +62,19 @@ export default function FormSignin({ next, oauthQuery, invitation = null }) {
 				<p className="text-sm text-pretty text-muted-foreground">
 					Enter the code sent to <span className="font-medium text-foreground">{email}</span>
 				</p>
+				{sent?.devCode && (
+					<div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary">
+						<p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sign-in Code</p>
+						<p className="mt-0.5 font-mono text-xl font-bold tracking-widest">{sent.devCode}</p>
+					</div>
+				)}
 				<Input
+					key={sent?.devCode}
 					name="code"
 					inputMode="numeric"
 					autoComplete="one-time-code"
 					placeholder="000000"
+					defaultValue={sent?.devCode}
 					maxLength={10}
 					required
 					autoFocus

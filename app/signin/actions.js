@@ -13,6 +13,7 @@ import { getCanonicalEmail } from "@/lib/email-aliases";
 import { getEmailSuggestion } from "@/lib/email-typos";
 import { findDomainsWithoutMail } from "@/lib/mail-domains";
 import { isExpiredOAuthQuery, readOAuthQueryField } from "@/lib/oauth-rules";
+import { canSendPlatformEmail } from "@/lib/platform-email";
 import { getClientIp, isRateLimited } from "@/lib/rate-limit";
 import { rememberNewsletter } from "@/lib/selected-newsletter";
 import { acceptInvitation, findInvitation, isSameInbox } from "@/lib/team";
@@ -52,13 +53,15 @@ export async function sendSigninCode(_state, formData) {
 	if (invitation && !isSameInbox(email, invitation.member.email)) return { error: "Sign in with the address your invitation went to" };
 	const problem = isCloud() && (await getAddressProblem(email));
 	if (problem) return problem;
+	let code;
 	try {
-		await sendSigninCodeEmail(email);
+		code = await sendSigninCodeEmail(email);
 	} catch (error) {
 		console.error("[signin] Could not send a code:", error.message);
 		return { error: CODE_FAILED_MESSAGE };
 	}
-	return { email };
+	const canSend = canSendPlatformEmail();
+	return { email, devCode: !canSend ? code : null };
 }
 
 // MailCheap Cloud takes anyone, and codes that bounce cost the reputation every later code goes out on; a self-hosted
