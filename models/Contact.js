@@ -15,9 +15,24 @@ const contactSchema = new mongoose.Schema(
 		sourceDomain: { type: String, trim: true },
 		// Where the person was, as a two-letter code (lib/countries.js): from the signup that added them, their confirmation, or
 		// else their first click in an email.
-		country: { type: String },
+		country: { type: String, trim: true },
 		// What {{first_name}} prints in its emails (lib/merge-tags.js).
 		firstName: { type: String, trim: true },
+		lastName: { type: String, trim: true },
+		fullName: { type: String, trim: true },
+		company: { type: String, trim: true },
+		designation: { type: String, trim: true },
+		industry: { type: String, trim: true },
+		city: { type: String, trim: true },
+		phone: { type: String, trim: true },
+		// Persona classification for targeted campaigns (e.g. IN_HOUSE_COUNSEL, LAW_FIRM, STARTUP_RND, CPVA_PROSPECT)
+		persona: { type: String, trim: true },
+		// Event-specific lifecycle statuses
+		gipcStatus: { type: String, trim: true, default: "NONE" },
+		cpvaStatus: { type: String, trim: true, default: "NONE" },
+		// Dynamic scoring (0-100)
+		intentScore: { type: Number, default: 0, min: 0, max: 100 },
+		engagementScore: { type: Number, default: 0, min: 0, max: 100 },
 		// Values for the account's own fields (Account.contactFields), by key: text, a number or a date (lib/contact-fields.js).
 		fields: { type: mongoose.Schema.Types.Mixed },
 		// Lowercase labels, many per contact, for segments and the contacts list.
@@ -104,5 +119,14 @@ contactSchema.index({ newsletterId: 1, source: 1, subscribedAt: -1, _id: -1 });
 contactSchema.index({ newsletterId: 1, lastChanceAt: 1 }, { partialFilterExpression: { lastChanceAt: { $exists: true } } });
 // An admin taking an address off the never-email list finds the contacts it stopped, in every account.
 contactSchema.index({ email: 1 }, { partialFilterExpression: { undeliverableAt: { $exists: true } } });
+// Persona and event segmentation indexes
+contactSchema.index({ accountId: 1, persona: 1, subscribedAt: -1 });
+contactSchema.index({ accountId: 1, gipcStatus: 1 });
+contactSchema.index({ accountId: 1, cpvaStatus: 1 });
+contactSchema.index({ accountId: 1, company: 1 });
+contactSchema.index({ accountId: 1, intentScore: -1 });
+contactSchema.index({ newsletterId: 1, persona: 1, subscribedAt: -1 });
+contactSchema.index({ newsletterId: 1, gipcStatus: 1 });
+contactSchema.index({ newsletterId: 1, cpvaStatus: 1 });
 
 export default mongoose.models.Contact || mongoose.model("Contact", contactSchema);

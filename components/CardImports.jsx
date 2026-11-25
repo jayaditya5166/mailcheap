@@ -74,20 +74,57 @@ export default function CardImports({ newsletterId, imports: initialImports }) {
 
 function RowImport({ item, onDismiss }) {
 	const [isOpen, setIsOpen] = useState(false);
+	const [isCancelling, setIsCancelling] = useState(false);
 	const dropped = Object.entries(item.dropped).filter(([, count]) => count > 0);
 	const droppedTotal = dropped.reduce((sum, [, count]) => sum + count, 0);
 	const isRunning = item.status === "processing";
+	const isCancelled = item.status === "cancelled";
 	const name = item.fileName || "contacts";
+
+	async function handleCancel() {
+		if (!confirm("Are you sure you want to cancel this import?")) return;
+		setIsCancelling(true);
+		try {
+			await fetch(`/api/contacts/imports/${item.importId}/cancel`, { method: "POST" });
+			window.location.reload();
+		} catch {
+			setIsCancelling(false);
+		}
+	}
+
 	return (
 		<div className="rounded-xl px-4 py-3 shadow-border animate-enter">
 			<div className="flex items-center gap-3">
 				<IconStatus status={item.status} />
 				<div className="min-w-0 flex-1">
-					<p className="truncate text-sm font-medium">
-						{isRunning ? `Importing ${name}` : item.status === "failed" ? `Import of ${name} stopped` : `Imported ${name}`}
-					</p>
+					<div className="flex items-center gap-2">
+						<p className="truncate text-sm font-medium">
+							{isRunning
+								? `Importing ${name}`
+								: isCancelled
+									? `Import of ${name} cancelled`
+									: item.status === "failed"
+										? `Import of ${name} stopped`
+										: `Imported ${name}`}
+						</p>
+						{item.dryRun && (
+							<span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+								Dry-run
+							</span>
+						)}
+					</div>
 					<p className="truncate text-xs text-muted-foreground tabular-nums">{describeProgress(item, droppedTotal)}</p>
 				</div>
+				{isRunning && (
+					<button
+						type="button"
+						onClick={handleCancel}
+						disabled={isCancelling}
+						className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground outline-none hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring/50"
+					>
+						{isCancelling ? "Cancelling..." : "Cancel"}
+					</button>
+				)}
 				{!isRunning && (droppedTotal > 0 || isOpen) && (
 					<button
 						type="button"
@@ -120,6 +157,18 @@ function RowImport({ item, onDismiss }) {
 			)}
 			{isOpen && (
 				<div className="mt-3 flex flex-col gap-3 border-t border-border/60 pt-3">
+					<div className="flex items-center justify-between gap-2">
+						<span className="text-xs font-medium text-foreground">Exclusion breakdown</span>
+						{droppedTotal > 0 && (
+							<a
+								href={`/api/contacts/imports/${item.importId}/errors`}
+								download
+								className="text-xs text-primary underline underline-offset-4 hover:opacity-80"
+							>
+								Download error report (.csv)
+							</a>
+						)}
+					</div>
 					{dropped.length > 0 && (
 						<ul className="flex flex-col gap-1 text-xs text-muted-foreground">
 							{dropped.map(([reason, count]) => (
@@ -139,7 +188,7 @@ function RowImport({ item, onDismiss }) {
 
 function IconStatus({ status }) {
 	if (status === "processing") return <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />;
-	if (status === "failed") return <AlertTriangle className="size-4 shrink-0 text-amber-500" aria-hidden="true" />;
+	if (status === "failed" || status === "cancelled") return <AlertTriangle className="size-4 shrink-0 text-amber-500" aria-hidden="true" />;
 	return (
 		<span className="grid size-5 shrink-0 place-items-center rounded-full bg-emerald-500 text-white" aria-hidden="true">
 			<Check className="size-3" strokeWidth={3} />

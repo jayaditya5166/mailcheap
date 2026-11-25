@@ -85,6 +85,7 @@ export default function DialogImportContacts({
 	const [mode, setMode] = useState("file");
 	const [importTags, setImportTags] = useState([]);
 	const [hasConsent, setHasConsent] = useState(false);
+	const [dryRun, setDryRun] = useState(false);
 	const [sending, setSending] = useState(null);
 	const [isImporting, startImporting] = useTransition();
 	const { columns, profile } = useMemo(() => readColumnPlan(plan, fields), [plan, fields]);
@@ -115,6 +116,7 @@ export default function DialogImportContacts({
 		setMode("file");
 		setImportTags([]);
 		setHasConsent(false);
+		setDryRun(false);
 		setSending(null);
 	}
 
@@ -189,7 +191,7 @@ export default function DialogImportContacts({
 					consent: hasConsent,
 					importId,
 					rows: chunk,
-					...(!importId && { duplicates, total: allRows.length, fileName }),
+					...(!importId && { duplicates, total: allRows.length, fileName, dryRun }),
 				});
 				if (result?.error) {
 					setSending(null);
@@ -237,15 +239,29 @@ export default function DialogImportContacts({
 				{columns.email && <TablePreview contacts={rows.slice(0, PREVIEW_ROWS)} total={rows.length} profile={profile} fields={fields} />}
 				<SectionColumns plan={plan} fields={fields} onChange={(column, target) => setPlan((current) => assignColumnTarget(current, column, target))} />
 				<SectionOptions mode={mode} onMode={setMode} tags={importTags} onTags={setImportTags} tagOptions={tagOptions} />
-				<label className="flex items-start gap-2.5 text-sm">
-					<input
-						type="checkbox"
-						checked={hasConsent}
-						onChange={(event) => setHasConsent(event.target.checked)}
-						className="mt-0.5 size-4 shrink-0 accent-foreground"
-					/>
-					{CONSENT_TEXT}
-				</label>
+				<div className="flex flex-col gap-2.5 rounded-xl border border-border/60 bg-muted/30 p-3 text-sm">
+					<label className="flex items-start gap-2.5 cursor-pointer">
+						<input
+							type="checkbox"
+							checked={dryRun}
+							onChange={(event) => setDryRun(event.target.checked)}
+							className="mt-0.5 size-4 shrink-0 accent-foreground"
+						/>
+						<div>
+							<span className="font-medium text-foreground">Dry-run simulation mode</span>
+							<p className="text-xs text-muted-foreground">Validate emails, check duplicates & suppressions without saving to database.</p>
+						</div>
+					</label>
+					<label className="flex items-start gap-2.5 cursor-pointer border-t border-border/50 pt-2.5">
+						<input
+							type="checkbox"
+							checked={hasConsent}
+							onChange={(event) => setHasConsent(event.target.checked)}
+							className="mt-0.5 size-4 shrink-0 accent-foreground"
+						/>
+						<span>{CONSENT_TEXT}</span>
+					</label>
+				</div>
 			</div>
 		);
 	}
@@ -304,7 +320,13 @@ export default function DialogImportContacts({
 								</Button>
 							) : (
 								<Button onClick={runImport} disabled={!newsletter || rows.length === 0 || !hasConsent || isImporting} className="min-w-24">
-									{isImporting ? <Loader2 className="animate-spin" /> : `Import ${formatNumber(rows.length)} ${rows.length === 1 ? "contact" : "contacts"}`}
+									{isImporting ? (
+										<Loader2 className="animate-spin" />
+									) : dryRun ? (
+										`Simulate import (${formatNumber(rows.length)})`
+									) : (
+										`Import ${formatNumber(rows.length)} ${rows.length === 1 ? "contact" : "contacts"}`
+									)}
 								</Button>
 							)}
 						</DialogFooter>

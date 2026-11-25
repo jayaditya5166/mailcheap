@@ -3,9 +3,9 @@ import { accountScoped } from "../lib/account-scope.js";
 
 const counter = { type: Number, default: 0 };
 
-// processing while rows wait for the background job or the rest of the file, done, or failed (error says why).
+// processing while rows wait for the background job or the rest of the file, done, failed (error says why), or cancelled.
 // Imports from before background jobs have no status: they ran while the browser waited, so they're done.
-export const IMPORT_STATUSES = ["processing", "done", "failed"];
+export const IMPORT_STATUSES = ["processing", "done", "failed", "cancelled"];
 
 // One CSV import, with the customer's word that these people agreed to their emails. Its rows arrive in chunks
 // (ImportChunk) that a background job processes in order (lib/import-jobs.js).
@@ -20,6 +20,9 @@ const contactImportSchema = new mongoose.Schema(
 		consentText: { type: String, required: true },
 		consentAt: { type: Date, required: true },
 		status: { type: String, enum: IMPORT_STATUSES },
+		dryRun: { type: Boolean, default: false },
+		cancelledAt: { type: Date },
+		cancelledBy: { type: mongoose.Schema.Types.ObjectId },
 		fileName: { type: String, trim: true, maxlength: 200 },
 		// The rows the whole import sends, when the caller says (the dashboard does): it's done once they're all in.
 		total: { type: Number, min: 0 },
@@ -56,6 +59,7 @@ const contactImportSchema = new mongoose.Schema(
 
 contactImportSchema.plugin(accountScoped);
 contactImportSchema.index({ accountId: 1, createdAt: -1 });
+contactImportSchema.index({ accountId: 1, status: 1 });
 contactImportSchema.index({ accountId: 1, newsletterId: 1, createdAt: -1 });
 // The hourly look for imports nobody looked at (lib/import-jobs.js mendStalledImports).
 contactImportSchema.index({ updatedAt: 1 }, { partialFilterExpression: { status: "processing" } });
