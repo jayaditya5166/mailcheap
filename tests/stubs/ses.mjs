@@ -1,3 +1,4 @@
+import { isPrimaryInboxMode } from "../../lib/config.js";
 import { findDnsRecord } from "./dns-broker.mjs";
 
 // An in-memory SES: emails, tenants, identities and associations are kept here instead of going to AWS.
@@ -37,11 +38,13 @@ export async function sendSesEmail(email) {
 	if (process.env.SENDING_ENABLED !== "true") throw new Error("Sending is off (SENDING_ENABLED is not true)");
 	call("sendSesEmail", email);
 	const { tenantName, configurationSet, from } = email;
-	if (!tenantName || !configurationSet) throw new Error("Every email needs the account's SES tenant and configuration set");
-	const associated = state.associations.get(tenantName) ?? new Set();
-	const fromDomain = from.match(/@([^>\s]+)>?$/)?.[1];
-	if (!associated.has(`identity/${fromDomain}`) || !associated.has(`configuration-set/${configurationSet}`)) {
-		throw Object.assign(new Error(`${fromDomain} or ${configurationSet} is not associated with ${tenantName}`), { name: "NotFoundException" });
+	if (!isPrimaryInboxMode() && (!tenantName || !configurationSet)) throw new Error("Every email needs the account's SES tenant and configuration set");
+	if (tenantName && configurationSet) {
+		const associated = state.associations.get(tenantName) ?? new Set();
+		const fromDomain = from.match(/@([^>\s]+)>?$/)?.[1];
+		if (!associated.has(`identity/${fromDomain}`) || !associated.has(`configuration-set/${configurationSet}`)) {
+			throw Object.assign(new Error(`${fromDomain} or ${configurationSet} is not associated with ${tenantName}`), { name: "NotFoundException" });
+		}
 	}
 	sent.push(email);
 	return { sesMessageId: `ses-${sent.length}-${Date.now()}` };
