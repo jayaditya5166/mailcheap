@@ -9,8 +9,10 @@ import {
 	CalendarClock,
 	ChevronLeft,
 	CircleAlert,
+	Code,
 	Copy,
 	Eye,
+	FileCode,
 	FlaskConical,
 	Globe,
 	Loader2,
@@ -119,7 +121,13 @@ export default function FormCampaign({
 	authors: savedAuthors = NO_AUTHORS,
 	authorSuggestion = null,
 }) {
-	const isHtml = campaign.format === "html";
+	const [format, setFormat] = useState(() => (campaign.format === "html" ? "html" : "rich"));
+	const isHtml = format === "html";
+	const formatRef = useRef(format);
+	useEffect(() => {
+		formatRef.current = format;
+	}, [format]);
+	const fileInputRef = useRef(null);
 	// The newsletter's authors (components/PickerAuthor.jsx) and the draft's, saved as they're picked.
 	const [authors, setAuthors] = useState(savedAuthors);
 	const [authorId, setAuthorId] = useState(campaign.authorId ?? null);
@@ -140,7 +148,6 @@ export default function FormCampaign({
 	const [step, setStep] = useState("write");
 	const [isDiscardOpen, setIsDiscardOpen] = useState(false);
 	const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-	const format = isHtml ? "html" : "rich";
 	const [initialBody] = useState(() =>
 		campaign.format === "markdown" ? markdownToHtml(campaign.markdown) : campaign.html
 	);
@@ -163,9 +170,9 @@ export default function FormCampaign({
 	const saveDraft = useCallback(
 		(snapshot) => {
 			const sizeProblem = getBodySizeProblem(snapshot.body);
-			return sizeProblem ? { error: sizeProblem } : saveCampaign(campaign._id, { ...snapshot, format });
+			return sizeProblem ? { error: sizeProblem } : saveCampaign(campaign._id, { ...snapshot, format: formatRef.current });
 		},
-		[campaign._id, format]
+		[campaign._id]
 	);
 	const loadSaved = useCallback(() => loadDraft(campaign._id), [campaign._id]);
 	// This instant's, with what the editor hasn't passed on yet.
@@ -173,10 +180,58 @@ export default function FormCampaign({
 		() => ({
 			subject: subjectRef.current?.value ?? valuesRef.current.subject,
 			previewText: previewTextRef.current?.value ?? valuesRef.current.previewText,
-			body: editorRef.current?.getEditor()?.getHTML() ?? valuesRef.current.body,
+			body: formatRef.current === "html" ? valuesRef.current.body : (editorRef.current?.getEditor()?.getHTML() ?? valuesRef.current.body),
 		}),
 		[]
 	);
+
+	const handleImportHtml = useCallback((event) => {
+		const file = event.target.files?.[0];
+		if (!file) return;
+
+		const reader = new FileReader();
+		reader.onload = (e) => {
+			const text = e.target?.result;
+			if (typeof text !== "string") return;
+
+			const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+			const extractedTitle = titleMatch ? titleMatch[1].trim() : "";
+
+			setFormat("html");
+			formatRef.current = "html";
+			const nextValues = {
+				...valuesRef.current,
+				body: text,
+				subject: valuesRef.current.subject || extractedTitle || valuesRef.current.subject,
+			};
+			setValues(nextValues);
+			saveCampaign(campaign._id, { ...nextValues, format: "html" });
+
+			toast.success(`Imported ${file.name}`);
+			if (fileInputRef.current) fileInputRef.current.value = "";
+		};
+		reader.onerror = () => {
+			toast.error("Couldn't read the HTML file");
+		};
+		reader.readAsText(file);
+	}, [campaign._id]);
+
+	const toggleFormat = useCallback(() => {
+		if (isHtml) {
+			if (!window.confirm("Switch to visual editor? Custom HTML formatting and styles may change.")) {
+				return;
+			}
+			setFormat("rich");
+			formatRef.current = "rich";
+			saveCampaign(campaign._id, { ...valuesRef.current, format: "rich" });
+		} else {
+			const currentHtml = editorRef.current?.getEditor()?.getHTML() ?? valuesRef.current.body;
+			setFormat("html");
+			formatRef.current = "html";
+			setValues((current) => ({ ...current, body: currentHtml }));
+			saveCampaign(campaign._id, { ...valuesRef.current, body: currentHtml, format: "html" });
+		}
+	}, [campaign._id, isHtml]);
 	// collaboration: on a newsletter whose team someone joined, the draft's revision. Saves then never write over someone
 	// else's, and the write step shows who else is on it and where.
 	const sync = useDraftSync({
@@ -504,11 +559,21 @@ export default function FormCampaign({
 			onPreview={openPreview}
 			onDuplicate={() => runAction(duplicateCampaign)}
 			onDiscard={() => setIsDiscardOpen(true)}
+			onImportHtml={() => fileInputRef.current?.click()}
+			isHtml={isHtml}
+			onToggleFormat={toggleFormat}
 		/>
 	);
 
 	return (
 		<div ref={rootRef} data-campaign-steps className="pb-(--step-bar-space) lg:pb-0">
+			<input
+				ref={fileInputRef}
+				type="file"
+				accept=".html,.htm,text/html"
+				className="hidden"
+				onChange={handleImportHtml}
+			/>
 			{/* Phones and tablets: the title and the menu first, then the steps, which stick under the top bar. */}
 			<div className="mb-4 flex items-center gap-2 animate-enter lg:hidden">
 				{title}
@@ -565,13 +630,41 @@ export default function FormCampaign({
 								<PickerAuthor ref={authorRef} {...authorPicker} />
 							</RowCampaign>
 						</div>
+						<div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-1.5 text-xs text-muted-foreground">
+							<div className="flex items-center gap-1.5 font-medium">
+								{isHtml ? <Code className="size-3.5 text-foreground" /> : <Eye className="size-3.5" />}
+								<span className={isHtml ? "text-foreground" : ""}>
+									{isHtml ? "HTML template" : "Visual editor"}
+								</span>
+							</div>
+							<div className="flex items-center gap-1">
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onClick={() => fileInputRef.current?.click()}
+									className="h-7 gap-1 px-2 text-xs"
+								>
+									<FileCode className="size-3.5" />
+									<span>Import HTML</span>
+								</Button>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									onClick={toggleFormat}
+									className="h-7 gap-1 px-2 text-xs"
+								>
+									{isHtml ? "Switch to visual" : "Switch to HTML"}
+								</Button>
+							</div>
+						</div>
 						{isHtml ? (
 							<div className="relative">
-								<span className="pointer-events-none absolute top-3 right-4 text-xs text-muted-foreground">HTML</span>
 								<textarea
 									value={values.body}
 									onChange={update("body")}
-									placeholder="<html>"
+									placeholder="<!DOCTYPE html>..."
 									spellCheck={false}
 									aria-label="Content"
 									className="block min-h-[560px] w-full resize-none bg-transparent px-4 py-4 font-mono text-[13px] leading-6 outline-none [field-sizing:content] placeholder:text-muted-foreground"
@@ -580,9 +673,10 @@ export default function FormCampaign({
 						) : (
 							<>
 								<EditorRich
+									key={format}
 									ref={editorRef}
 									gutterRef={writeRef}
-									content={initialBody}
+									content={values.body}
 									onChange={updateBody}
 									contactFields={contactFields}
 									onContactFieldsChange={setEditedFields}
@@ -801,7 +895,17 @@ function ButtonInsertTag({ contactFields, onInsert }) {
 
 // The test and the preview from any step. A dialog opened from here keeps the focus the menu would give back to its
 // button as it closes; the test and the preview hand it to that button once they close, as the item that opened them is gone.
-function MenuMore({ isWorking, isTestDisabled, onTest, onPreview, onDuplicate, onDiscard }) {
+function MenuMore({
+	isWorking,
+	isTestDisabled,
+	onTest,
+	onPreview,
+	onDuplicate,
+	onDiscard,
+	onImportHtml,
+	isHtml,
+	onToggleFormat,
+}) {
 	const triggerRef = useRef(null);
 	const isOpeningDialogRef = useRef(false);
 
@@ -823,7 +927,7 @@ function MenuMore({ isWorking, isTestDisabled, onTest, onPreview, onDuplicate, o
 					<MoreHorizontal />
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" onCloseAutoFocus={keepDialogFocus} className="w-52">
+			<DropdownMenuContent align="end" onCloseAutoFocus={keepDialogFocus} className="w-56">
 				<DropdownMenuItem onSelect={() => openDialog(() => onTest(triggerRef.current))} disabled={isTestDisabled}>
 					<FlaskConical />
 					Send a test email
@@ -831,6 +935,15 @@ function MenuMore({ isWorking, isTestDisabled, onTest, onPreview, onDuplicate, o
 				<DropdownMenuItem onSelect={() => openDialog(() => onPreview(triggerRef.current))}>
 					<Eye />
 					Preview
+				</DropdownMenuItem>
+				<DropdownMenuSeparator />
+				<DropdownMenuItem onSelect={onImportHtml}>
+					<FileCode />
+					Import HTML template
+				</DropdownMenuItem>
+				<DropdownMenuItem onSelect={onToggleFormat}>
+					<Code />
+					{isHtml ? "Switch to visual editor" : "Switch to HTML code"}
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
 				<DropdownMenuItem onSelect={onDuplicate}>
