@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { runDashboardAction, toFormError } from "@/lib/actions/dashboard";
 import { gravatarHash } from "@/lib/gravatar";
+import { setSendingAllowed } from "@/lib/sending-state";
 
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_PREVIEW_TEXT_LENGTH = 300;
@@ -311,4 +312,15 @@ export async function updateArchiveSlug(id, value) {
 	if (failure) return toFormError(failure);
 	refresh(id);
 	return { ok: true, archiveSlug: output.archiveSlug ?? "" };
+}
+
+// Allows turning sending on or off directly from the dashboard
+export async function toggleSending(enabled = true, campaignId = null) {
+	await setSendingAllowed(enabled);
+	revalidatePath("/campaigns");
+	if (campaignId) revalidatePath(`/campaigns/${campaignId}`);
+	revalidatePath("/newsletters/sender");
+	revalidatePath("/account");
+	revalidatePath("/admin");
+	return { ok: true, isSendingEnabled: enabled };
 }

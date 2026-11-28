@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, CircleAlert, CodeXml, ExternalLink, FlaskConical, Loader2, RotateCcw, X } from "lucide-react";
-import { addDefaultAuthor, setDefaultAuthor } from "@/app/(app)/campaigns/actions";
+import { Check, CircleAlert, CodeXml, ExternalLink, FlaskConical, Loader2, Power, RotateCcw, X } from "lucide-react";
+import { addDefaultAuthor, setDefaultAuthor, toggleSending } from "@/app/(app)/campaigns/actions";
 import { checkSlug, saveNewsletter, sendWelcomeTest } from "@/app/(app)/newsletters/actions";
 import BarSave from "@/components/BarSave";
 import ButtonCopy from "@/components/ButtonCopy";
@@ -151,6 +151,7 @@ export default function FormNewsletter({
 					fromEmail={fromEmail}
 					defaultPostalAddress={defaultPostalAddress}
 					authors={authors}
+					isSendingEnabled={isSendingEnabled}
 				/>
 			)}
 			{section === "signups" && <SectionSignups {...form} review={signupReviews?.confirmation} />}
@@ -250,8 +251,9 @@ function SectionGeneral({ draft, setDraft, set, newsletter, sharedDomain, appUrl
 	);
 }
 
-function SectionSender({ draft, set, update, newsletter, domains, sharedDomain, fromEmail, defaultPostalAddress, authors }) {
+function SectionSender({ draft, set, update, newsletter, domains, sharedDomain, fromEmail, defaultPostalAddress, authors, isSendingEnabled }) {
 	const postalAddressRef = useRef(null);
+	const [sendingState, setSendingState] = useState(Boolean(isSendingEnabled));
 	const { slug, fromName, fromLocal, fromDomain, postalAddress } = draft;
 	const sharedAddress = sharedDomain ? getSharedAddress(slug || "slug", sharedDomain) : null;
 	const isShared = Boolean(sharedDomain) && fromDomain === sharedDomain;
@@ -345,6 +347,33 @@ function SectionSender({ draft, set, update, newsletter, domains, sharedDomain, 
 					className="scroll-mt-28"
 					onChange={update("postalAddress")}
 				/>
+			</Field>
+			<Field
+				label="Email sending"
+				hint={
+					sendingState
+						? "Emails are allowed to be sent to contacts and test recipients."
+						: "Sending is currently off on this server. Turn it on to allow campaigns and test emails."
+				}
+			>
+				<div className="flex items-center gap-3">
+					<Button
+						type="button"
+						variant={sendingState ? "outline" : "default"}
+						size="sm"
+						onClick={async () => {
+							const nextState = !sendingState;
+							setSendingState(nextState);
+							await toggleSending(nextState);
+						}}
+					>
+						<Power className="size-3.5" />
+						{sendingState ? "Turn sending off" : "Turn sending on"}
+					</Button>
+					<span className="text-xs font-medium text-muted-foreground">
+						{sendingState ? "Sending is on" : "Sending is off"}
+					</span>
+				</div>
 			</Field>
 		</Section>
 	);

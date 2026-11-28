@@ -15,6 +15,7 @@ import { listCampaignRecipients } from "@/lib/campaign-recipients";
 import { getCampaignActivity, getCampaignComparison } from "@/lib/campaign-report";
 import { countCampaignGmail, countRemainingContacts, sendTimesPipeline } from "@/lib/campaign-queries";
 import { getSharedDomain, isSendingEnabled } from "@/lib/config";
+import { isSendingAllowed } from "@/lib/sending-state";
 import { getFieldOptions } from "@/lib/contact-fields";
 import { getStoredTips } from "@/lib/content-review";
 import { gravatarHash } from "@/lib/gravatar";
@@ -158,7 +159,7 @@ export default async function CampaignPage({ params, searchParams }) {
 			senderProblem={sender.problem ?? null}
 			isSharedSender={isOnSharedDomain(newsletter.fromEmail, sharedDomain)}
 			domainNudge={isDomainNudgeShown ? domainNudge : null}
-			isSendingEnabled={isSendingEnabled()}
+			isSendingEnabled={await isSendingAllowed(account)}
 			testRecipients={testRecipients}
 			sendTimes={sendTimes}
 			archiveUrlBase={newsletter.archiveEnabled ? getArchiveUrls(newsletter).absolutePost("") : null}

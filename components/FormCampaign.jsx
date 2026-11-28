@@ -17,6 +17,7 @@ import {
 	Globe,
 	Loader2,
 	MoreHorizontal,
+	Power,
 	Send,
 	Trash2,
 	UserRound,
@@ -31,6 +32,7 @@ import {
 	sendTestCampaign,
 	setCampaignAuthor,
 	setCampaignPublishTo,
+	toggleSending,
 } from "@/app/(app)/campaigns/actions";
 import AvatarNewsletter from "@/components/AvatarNewsletter";
 import BadgeStatus from "@/components/BadgeStatus";
@@ -106,7 +108,7 @@ export default function FormCampaign({
 	senderProblem,
 	isSharedSender = false,
 	domainNudge = null,
-	isSendingEnabled,
+	isSendingEnabled: initialSendingEnabled = true,
 	testRecipients,
 	sendTimes,
 	archiveUrlBase,
@@ -121,6 +123,7 @@ export default function FormCampaign({
 	authors: savedAuthors = NO_AUTHORS,
 	authorSuggestion = null,
 }) {
+	const [isSendingEnabled, setIsSendingEnabled] = useState(Boolean(initialSendingEnabled));
 	const [format, setFormat] = useState(() => (campaign.format === "html" ? "html" : "rich"));
 	const isHtml = format === "html";
 	const formatRef = useRef(format);
@@ -128,6 +131,22 @@ export default function FormCampaign({
 		formatRef.current = format;
 	}, [format]);
 	const fileInputRef = useRef(null);
+
+	const handleToggleSending = useCallback(
+		async (targetState = true) => {
+			setIsSendingEnabled(targetState);
+			toast.loading(targetState ? "Turning sending on..." : "Turning sending off...");
+			try {
+				await toggleSending(targetState, campaign._id);
+				toast.dismiss();
+				toast.success(targetState ? "Sending is turned on" : "Sending is turned off");
+			} catch (err) {
+				toast.dismiss();
+				toast.error("Couldn't update sending status");
+			}
+		},
+		[campaign._id]
+	);
 	// The newsletter's authors (components/PickerAuthor.jsx) and the draft's, saved as they're picked.
 	const [authors, setAuthors] = useState(savedAuthors);
 	const [authorId, setAuthorId] = useState(campaign.authorId ?? null);
@@ -562,6 +581,8 @@ export default function FormCampaign({
 			onImportHtml={() => fileInputRef.current?.click()}
 			isHtml={isHtml}
 			onToggleFormat={toggleFormat}
+			isSendingEnabled={isSendingEnabled}
+			onToggleSending={handleToggleSending}
 		/>
 	);
 
@@ -583,7 +604,7 @@ export default function FormCampaign({
 				<div className="hidden min-w-0 lg:flex">{title}</div>
 				<NavSteps step={step} onStep={goToStep} />
 				<div className="hidden min-w-0 items-center justify-end gap-2 lg:flex">
-					<BarAction action={action} status={renderStatus()} onEdit={editField} />
+					<BarAction action={action} status={renderStatus()} onEdit={editField} onToggleSending={handleToggleSending} />
 					{menu}
 				</div>
 			</header>
@@ -592,7 +613,7 @@ export default function FormCampaign({
 				{step !== "write" && accountProblems.length > 0 && (
 					<NoticeSendProblems
 						problems={accountProblems}
-						renderFix={({ fix }) => fix && <ButtonFix fix={fix} onEdit={editField} />}
+						renderFix={({ fix }) => fix && <ButtonFix fix={fix} onEdit={editField} onToggleSending={handleToggleSending} />}
 						className="mb-6 animate-enter"
 					/>
 				)}
@@ -695,7 +716,13 @@ export default function FormCampaign({
 						checks={reviewChecks.filter(({ isAccount }) => !isAccount)}
 						renderFix={({ fix }) =>
 							fix && (
-								<ButtonFix fix={fix} onEdit={editField} onTest={openTest} isTestDisabled={isTestDisabled} />
+								<ButtonFix
+									fix={fix}
+									onEdit={editField}
+									onTest={openTest}
+									isTestDisabled={isTestDisabled}
+									onToggleSending={handleToggleSending}
+								/>
 							)
 						}
 					/>
@@ -707,10 +734,17 @@ export default function FormCampaign({
 						<ButtonRow
 							icon={FlaskConical}
 							title="Send a test email"
-							description={isTestDisabled ? "Sending is off" : `Goes to ${describeTestRecipients(testRecipients)}`}
-							onClick={(event) => openTest(event.currentTarget)}
-							isDisabled={isTestDisabled}
+							description={isTestDisabled ? "Sending is off (click to turn on)" : `Goes to ${describeTestRecipients(testRecipients)}`}
+							onClick={(event) => (isTestDisabled ? handleToggleSending(true) : openTest(event.currentTarget))}
 						/>
+						{isTestDisabled && (
+							<div className="flex items-center justify-between border-t border-border/60 bg-muted/20 px-4 py-2 text-xs">
+								<span className="text-muted-foreground">Sending is currently off on this server</span>
+								<Button size="sm" variant="default" className="h-7 text-xs" onClick={() => handleToggleSending(true)}>
+									Turn sending on
+								</Button>
+							</div>
+						)}
 						<ButtonRow
 							icon={Eye}
 							title="Preview"
@@ -905,6 +939,8 @@ function MenuMore({
 	onImportHtml,
 	isHtml,
 	onToggleFormat,
+	isSendingEnabled,
+	onToggleSending,
 }) {
 	const triggerRef = useRef(null);
 	const isOpeningDialogRef = useRef(false);
@@ -946,6 +982,11 @@ function MenuMore({
 					{isHtml ? "Switch to visual editor" : "Switch to HTML code"}
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
+				<DropdownMenuItem onSelect={() => onToggleSending(!isSendingEnabled)}>
+					<Power />
+					{isSendingEnabled ? "Turn sending off" : "Turn sending on"}
+				</DropdownMenuItem>
+				<DropdownMenuSeparator />
 				<DropdownMenuItem onSelect={onDuplicate}>
 					<Copy />
 					Duplicate
@@ -961,7 +1002,7 @@ function MenuMore({
 
 // The step's one button, with the step's status next to it; the width doesn't change from a step to the next. What
 // stops it shows when it's pressed, each with its fix. A fix keeps the focus it moves; otherwise it goes back to the button.
-function BarAction({ action, status, onEdit, side = "bottom", className }) {
+function BarAction({ action, status, onEdit, onToggleSending, side = "bottom", className }) {
 	const [isOpen, setIsOpen] = useState(false);
 	const buttonRef = useRef(null);
 	const isFixingRef = useRef(false);
@@ -1011,7 +1052,7 @@ function BarAction({ action, status, onEdit, side = "bottom", className }) {
 					<p className="px-4 pt-3.5 pb-1 text-sm font-medium">{action.problemsTitle}</p>
 					<ListSendProblems
 						problems={problems}
-						renderFix={(problem) => problem.fix && <ButtonFix fix={problem.fix} onEdit={fix} />}
+						renderFix={(problem) => problem.fix && <ButtonFix fix={problem.fix} onEdit={fix} onToggleSending={onToggleSending} />}
 						className="px-4 pb-2"
 					/>
 				</PopoverContent>
@@ -1020,7 +1061,7 @@ function BarAction({ action, status, onEdit, side = "bottom", className }) {
 	);
 }
 
-function ButtonFix({ fix, onEdit, onTest, isTestDisabled }) {
+function ButtonFix({ fix, onEdit, onTest, isTestDisabled, onToggleSending }) {
 	if (fix.href) {
 		return (
 			<Button asChild variant="outline" size="sm">
@@ -1031,6 +1072,13 @@ function ButtonFix({ fix, onEdit, onTest, isTestDisabled }) {
 	if (fix.action === "test") {
 		return (
 			<Button variant="outline" size="sm" onClick={(event) => onTest(event.currentTarget)} disabled={isTestDisabled} className="min-w-24">
+				{fix.label}
+			</Button>
+		);
+	}
+	if (fix.action === "toggle-sending") {
+		return (
+			<Button variant="default" size="sm" onClick={() => onToggleSending?.(true)} className="min-w-24">
 				{fix.label}
 			</Button>
 		);
